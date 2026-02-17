@@ -1,56 +1,47 @@
-using Microsoft.EntityFrameworkCore;
 using geoback.Data;
-using geoback.Models;
-using BCrypt.Net;
+using geoback.Services;
+using Microsoft.EntityFrameworkCore;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
-// 1. Database Context
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<GeoDbContext>(options =>
-    options.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 23))));
-
-// 2. CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowGeoFront",
-        policy =>
-        {
-            policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
-                  .AllowAnyMethod()
-                  .AllowAnyHeader();
-        });
-});
-
-// 2.1 Authentication
-var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["Secret"] ?? "ThisIsASecretKeyForDevelopmentOnly12345!MakeSureItIsLongEnough";
-
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
-    {
-        ValidateIssuer = false,
-        ValidateAudience = false,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(secretKey))
-    };
-});
-
-// 3. Controllers
 builder.Services.AddControllers();
-
-// 4. OpenAPI/Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// MySQL Database Context
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseMySql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection"))
+    ));
+
+// Register services
+builder.Services.AddScoped<IFacilityService, FacilityService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+
+// HTTP client for core banking
+builder.Services.AddHttpClient("CoreBanking", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["CoreBanking:BaseUrl"] ?? "https://core-banking.ncba.co.ke/api");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+
+// CORS for React frontend (Vite default port)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("ReactApp", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
+// Add authentication if needed (commented out for now)
+// builder.Services.AddAuthentication();
 
 var app = builder.Build();
 
@@ -62,76 +53,29 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-app.UseCors("AllowGeoFront");
-
-app.UseAuthentication();
+app.UseCors("ReactApp");
+// app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
-// Ensure database is created
+// Test database connection on startup
 using (var scope = app.Services.CreateScope())
 {
-    var services = scope.ServiceProvider;
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     try
     {
-        var context = services.GetRequiredService<GeoDbContext>();
-        context.Database.EnsureCreated();
-
-        // Create Users table manually if it doesn't exist (because EnsureCreated doesn't update existing DBs)
-        context.Database.ExecuteSqlRaw(@"
-            CREATE TABLE IF NOT EXISTS Users (
-                Id CHAR(36) NOT NULL,
-                Email VARCHAR(255) NOT NULL,
-                PasswordHash LONGTEXT NOT NULL,
-                FirstName LONGTEXT NOT NULL,
-                LastName LONGTEXT NOT NULL,
-                Role LONGTEXT NOT NULL,
-                CreatedAt DATETIME(6) NOT NULL,
-                UpdatedAt DATETIME(6) NOT NULL,
-                PRIMARY KEY (Id),
-                UNIQUE INDEX IX_Users_Email (Email)
-            );
-        ");
-
-        // Ensure Clients table has ProjectName column (manual migration for EnsureCreated limitation)
-        try 
+        if (dbContext.Database.CanConnect())
         {
-            context.Database.ExecuteSqlRaw("ALTER TABLE Clients ADD ProjectName LONGTEXT NULL;");
+            Console.WriteLine("✓ Successfully connected to MySQL database");
         }
-        catch (Exception ex)
+        else
         {
-            // Ignore if column already exists (Error 1060 in MySQL)
-            if (!ex.Message.Contains("Duplicate column name") && !ex.Message.Contains("1060"))
-            {
-                Console.WriteLine($"Note: Client table update attempted but failed: {ex.Message}");
-            }
-        }
-
-        // Seed a test user if none exists
-        if (!context.Users.Any(u => u.Email == "test@geobuild.com"))
-        {
-            var testUser = new User
-            {
-                Id = Guid.NewGuid(),
-                Email = "test@geobuild.com",
-                FirstName = "Test",
-                LastName = "User",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
-                Role = "Admin",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-            context.Users.Add(testUser);
-            context.SaveChanges();
-            Console.WriteLine("Test user created: test@geobuild.com / Password123!");
+            Console.WriteLine("✗ Failed to connect to MySQL database");
         }
     }
     catch (Exception ex)
     {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred creating the DB.");
+        Console.WriteLine($"✗ Database connection error: {ex.Message}");
     }
 }
 

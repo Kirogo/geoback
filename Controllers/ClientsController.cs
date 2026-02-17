@@ -1,3 +1,4 @@
+//geo-back/Controllers/ClientsController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using geoback.Data;
@@ -9,11 +10,13 @@ namespace geoback.Controllers;
 [Route("api/[controller]")]
 public class ClientsController : ControllerBase
 {
-    private readonly GeoDbContext _context;
+    private readonly ApplicationDbContext _context;
+    private readonly ILogger<ClientsController> _logger;
 
-    public ClientsController(GeoDbContext context)
+    public ClientsController(ApplicationDbContext context, ILogger<ClientsController> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -22,74 +25,108 @@ public class ClientsController : ControllerBase
         [FromQuery] int page = 1, 
         [FromQuery] int pageSize = 10)
     {
-        var query = _context.Clients.AsQueryable();
-
-        if (!string.IsNullOrEmpty(search))
+        try
         {
-            query = query.Where(c => 
-                c.Name.Contains(search) || 
-                c.CustomerNumber.Contains(search) ||
-                (c.ProjectName != null && c.ProjectName.Contains(search)));
+            var query = _context.Clients.AsQueryable();
+
+            if (!string.IsNullOrEmpty(search))
+            {
+                query = query.Where(c => 
+                    c.Name.Contains(search) || 
+                    c.CustomerNumber.Contains(search) ||
+                    (c.ProjectName != null && c.ProjectName.Contains(search)));
+            }
+
+            var total = await query.CountAsync();
+            var items = await query
+                .OrderByDescending(c => c.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return new PaginatedResponse<Client>
+            {
+                Items = items,
+                Total = total,
+                Page = page,
+                PageSize = pageSize,
+                TotalPages = (int)Math.Ceiling(total / (double)pageSize)
+            };
         }
-
-        var total = await query.CountAsync();
-        var items = await query
-            .OrderByDescending(c => c.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
-
-        return new PaginatedResponse<Client>
+        catch (Exception ex)
         {
-            Items = items,
-            Total = total,
-            Page = page,
-            PageSize = pageSize,
-            TotalPages = (int)Math.Ceiling(total / (double)pageSize)
-        };
+            _logger.LogError(ex, "Error getting clients");
+            return StatusCode(500, new { message = "An error occurred while fetching clients" });
+        }
     }
 
     [HttpGet("customer/{customerNumber}")]
     public async Task<ActionResult<Client>> GetByCustomerNumber(string customerNumber)
     {
-        var client = await _context.Clients
-            .FirstOrDefaultAsync(c => c.CustomerNumber == customerNumber);
-
-        if (client == null)
+        try
         {
-            return NotFound();
-        }
+            var client = await _context.Clients
+                .FirstOrDefaultAsync(c => c.CustomerNumber == customerNumber);
 
-        return client;
+            if (client == null)
+            {
+                return NotFound(new { message = $"Client with customer number {customerNumber} not found" });
+            }
+
+            return client;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting client by customer number: {CustomerNumber}", customerNumber);
+            return StatusCode(500, new { message = "An error occurred while fetching the client" });
+        }
     }
 
     [HttpGet("search")]
     public async Task<ActionResult<IEnumerable<Client>>> Search([FromQuery] string q)
     {
-        if (string.IsNullOrEmpty(q))
+        try
         {
-            return Ok(new List<Client>());
+            if (string.IsNullOrEmpty(q))
+            {
+                return Ok(new List<Client>());
+            }
+
+            var clients = await _context.Clients
+                .Where(c => c.Name.Contains(q) || 
+                           c.CustomerNumber.Contains(q) || 
+                           (c.ProjectName != null && c.ProjectName.Contains(q)))
+                .Take(10)
+                .ToListAsync();
+
+            return Ok(clients);
         }
-
-        var clients = await _context.Clients
-            .Where(c => c.Name.Contains(q) || c.CustomerNumber.Contains(q) || (c.ProjectName != null && c.ProjectName.Contains(q)))
-            .Take(10)
-            .ToListAsync();
-
-        return Ok(clients);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching clients with query: {Query}", q);
+            return StatusCode(500, new { message = "An error occurred while searching clients" });
+        }
     }
 
     [HttpGet("{id}")]
     public async Task<ActionResult<Client>> GetClient(Guid id)
     {
-        var client = await _context.Clients.FindAsync(id);
-
-        if (client == null)
+        try
         {
-            return NotFound();
-        }
+            var client = await _context.Clients.FindAsync(id);
 
-        return client;
+            if (client == null)
+            {
+                return NotFound(new { message = $"Client with ID {id} not found" });
+            }
+
+            return client;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting client with ID: {ClientId}", id);
+            return StatusCode(500, new { message = "An error occurred while fetching the client" });
+        }
     }
 
     [HttpPost]
@@ -97,14 +134,26 @@ public class ClientsController : ControllerBase
     {
         try 
         {
+            // Generate a new ID if not provided
+            if (client.Id == Guid.Empty)
+            {
+                client.Id = Guid.NewGuid();
+            }
+
+            client.CreatedAt = DateTime.UtcNow;
+            client.UpdatedAt = DateTime.UtcNow;
+
             _context.Clients.Add(client);
             await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Client created successfully: {ClientId}", client.Id);
+
             return CreatedAtAction(nameof(GetClient), new { id = client.Id }, client);
         }
         catch (Exception ex)
         {
-            var message = ex.InnerException?.Message ?? ex.Message;
-            return StatusCode(500, new { message = message });
+            _logger.LogError(ex, "Error creating client");
+            return StatusCode(500, new { message = "An error occurred while creating the client" });
         }
     }
 
@@ -113,43 +162,61 @@ public class ClientsController : ControllerBase
     {
         if (id != client.Id)
         {
-            return BadRequest();
+            return BadRequest(new { message = "ID mismatch" });
         }
-
-        _context.Entry(client).State = EntityState.Modified;
 
         try
         {
+            client.UpdatedAt = DateTime.UtcNow;
+            _context.Entry(client).State = EntityState.Modified;
             await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Client updated successfully: {ClientId}", id);
+
+            return NoContent();
         }
-        catch (DbUpdateConcurrencyException)
+        catch (DbUpdateConcurrencyException ex)
         {
             if (!ClientExists(id))
             {
-                return NotFound();
+                return NotFound(new { message = $"Client with ID {id} not found" });
             }
             else
             {
+                _logger.LogError(ex, "Concurrency error updating client: {ClientId}", id);
                 throw;
             }
         }
-
-        return NoContent();
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating client: {ClientId}", id);
+            return StatusCode(500, new { message = "An error occurred while updating the client" });
+        }
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteClient(Guid id)
     {
-        var client = await _context.Clients.FindAsync(id);
-        if (client == null)
+        try
         {
-            return NotFound();
+            var client = await _context.Clients.FindAsync(id);
+            if (client == null)
+            {
+                return NotFound(new { message = $"Client with ID {id} not found" });
+            }
+
+            _context.Clients.Remove(client);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Client deleted successfully: {ClientId}", id);
+
+            return NoContent();
         }
-
-        _context.Clients.Remove(client);
-        await _context.SaveChangesAsync();
-
-        return NoContent();
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting client: {ClientId}", id);
+            return StatusCode(500, new { message = "An error occurred while deleting the client" });
+        }
     }
 
     private bool ClientExists(Guid id)

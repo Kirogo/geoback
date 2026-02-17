@@ -1,46 +1,40 @@
-using System.ComponentModel.DataAnnotations;
-
-namespace geoback.DTOs;
-
-public class LoginDto
+namespace geoback.DTOs
 {
-    [Required]
-    [EmailAddress]
-    public string Email { get; set; } = string.Empty;
+    public class UserDto
+    {
+        public Guid Id { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
+    }
 
-    [Required]
-    public string Password { get; set; } = string.Empty;
-}
+    public class RegisterDto
+    {
+        public string Email { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string? Role { get; set; }
+    }
 
-public class RegisterDto
-{
-    [Required]
-    [EmailAddress]
-    public string Email { get; set; } = string.Empty;
+    public class LoginDto
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
 
-    [Required]
-    public string Password { get; set; } = string.Empty;
+    public class AuthResponseDto
+    {
+        public string Token { get; set; } = string.Empty;
+        public UserDto User { get; set; } = new();
+    }
 
-    [Required]
-    public string FirstName { get; set; } = string.Empty;
-
-    [Required]
-    public string LastName { get; set; } = string.Empty;
-
-    public string? Role { get; set; }
-}
-
-public class AuthResponseDto
-{
-    public string Token { get; set; } = string.Empty;
-    public UserDto User { get; set; } = new();
-}
-
-public class UserDto
-{
-    public Guid Id { get; set; }
-    public string Email { get; set; } = string.Empty;
-    public string FirstName { get; set; } = string.Empty;
-    public string LastName { get; set; } = string.Empty;
-    public string Role { get; set; } = string.Empty;
+    public class UpdateUserDto
+    {
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Role { get; set; }
+        public string? Password { get; set; }
+    }
 }
