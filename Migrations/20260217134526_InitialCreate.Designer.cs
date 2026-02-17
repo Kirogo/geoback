@@ -11,8 +11,8 @@ using geoback.Data;
 namespace geoback.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260217091052_AddUsersAndClients")]
-    partial class AddUsersAndClients
+    [Migration("20260217134526_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
