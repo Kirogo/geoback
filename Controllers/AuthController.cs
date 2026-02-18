@@ -1,4 +1,4 @@
-//geo-back/Controllers/AuthController.cs
+// Controllers/AuthController.cs
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -56,9 +56,11 @@ public class AuthController : ControllerBase
 
             _logger.LogInformation("User registered successfully: {Email}", user.Email);
 
+            var token = CreateToken(user);
             return Ok(new AuthResponseDto
             {
-                Token = CreateToken(user),
+                Token = token,
+                RefreshToken = token, // In production, generate a separate refresh token
                 User = MapToDto(user)
             });
         }
@@ -84,9 +86,11 @@ public class AuthController : ControllerBase
 
             _logger.LogInformation("User logged in successfully: {Email}", user.Email);
 
+            var token = CreateToken(user);
             return Ok(new AuthResponseDto
             {
-                Token = CreateToken(user),
+                Token = token,
+                RefreshToken = token, // In production, generate a separate refresh token
                 User = MapToDto(user)
             });
         }
@@ -94,6 +98,42 @@ public class AuthController : ControllerBase
         {
             _logger.LogError(ex, "Error during login");
             return StatusCode(500, new { message = "An error occurred during login" });
+        }
+    }
+    
+    [HttpPost("refresh")]
+    public async Task<ActionResult<AuthResponseDto>> RefreshToken([FromBody] RefreshTokenDto request)
+    {
+        try
+        {
+            // For now, we'll just create a new token based on the current request
+            // In production, you'd validate the refresh token and check expiration
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            
+            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid or missing token" });
+            }
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return Unauthorized(new { message = "User not found" });
+            }
+
+            var newToken = CreateToken(user);
+            
+            return Ok(new AuthResponseDto
+            {
+                Token = newToken,
+                User = MapToDto(user),
+                RefreshToken = newToken // In production, generate a separate refresh token
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error refreshing token");
+            return StatusCode(500, new { message = "An error occurred while refreshing the token" });
         }
     }
     

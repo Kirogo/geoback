@@ -27,7 +27,13 @@ namespace geoback.DTOs
     public class AuthResponseDto
     {
         public string Token { get; set; } = string.Empty;
+        public string? RefreshToken { get; set; }
         public UserDto User { get; set; } = new();
+    }
+
+    public class RefreshTokenDto
+    {
+        public string RefreshToken { get; set; } = string.Empty;
     }
 
     public class UpdateUserDto

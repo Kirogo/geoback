@@ -9,6 +9,7 @@ namespace geoback.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/reports")]  // Alternative route for frontend compatibility
     public class SiteVisitReportController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
@@ -202,6 +203,73 @@ namespace geoback.Controllers
             {
                 _logger.LogError(ex, "Error retrieving pending reports");
                 return StatusCode(500, "An error occurred while retrieving reports");
+            }
+        }
+
+        // RM: Get my reports (paginated)
+        [HttpGet("my-reports")]
+        public async Task<ActionResult<geoback.DTOs.PaginatedResponse<SiteVisitReportResponseDto>>> GetMyReports([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        {
+            try
+            {
+                var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                
+                if (string.IsNullOrEmpty(currentUserId))
+                    return Unauthorized(new { message = "User not found in token" });
+
+                var query = _context.SiteVisitReports
+                    .Include(r => r.Facility)
+                    .Include(r => r.Attachments)
+                    .Where(r => r.RMUserId == currentUserId)
+                    .OrderByDescending(r => r.VisitDate);
+
+                var total = await query.CountAsync();
+                var reports = await query
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(r => MapToResponseDto(r))
+                    .ToListAsync();
+
+                return Ok(new geoback.DTOs.PaginatedResponse<SiteVisitReportResponseDto>
+                {
+                    Items = reports,
+                    Total = total,
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalPages = (int)Math.Ceiling(total / (double)pageSize)
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving user's reports");
+                return StatusCode(500, new { message = "An error occurred while retrieving reports" });
+            }
+        }
+
+        // QS: Get my pending reports (alias for pending)
+        [HttpGet("my-pending-reports")]
+        public async Task<ActionResult<List<SiteVisitReportResponseDto>>> GetMyPendingReports()
+        {
+            try
+            {
+                var currentUserRole = User.Claims.FirstOrDefault(c => c.Type == "role")?.Value;
+                if (currentUserRole != "QS")
+                    return Forbid("Only QS users can access this endpoint");
+
+                var pendingReports = await _context.SiteVisitReports
+                    .Include(r => r.Facility)
+                    .Include(r => r.Attachments)
+                    .Where(r => r.Status == "Submitted" || r.Status == "UnderReview")
+                    .OrderByDescending(r => r.SubmittedAt)
+                    .Select(r => MapToResponseDto(r))
+                    .ToListAsync();
+
+                return Ok(pendingReports);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving pending reports");
+                return StatusCode(500, new { message = "An error occurred while retrieving reports" });
             }
         }
 

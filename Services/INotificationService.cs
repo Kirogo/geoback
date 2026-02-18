@@ -2,7 +2,7 @@ namespace geoback.Services
 {
     public interface INotificationService
     {
-        Task SendInAppNotificationAsync(string userId, string title, string message, string link = null);
+        Task SendInAppNotificationAsync(string userId, string title, string message, string? link = null);
         Task SendEmailNotificationAsync(string email, string subject, string body);
         Task NotifyQSsNewReportAsync(int reportId, string ibpsNumber);
         Task NotifyRMReportStatusChangedAsync(int reportId, string rmUserId, string newStatus, string comments);
@@ -18,7 +18,7 @@ namespace geoback.Services
             _logger = logger;
         }
 
-        public async Task SendInAppNotificationAsync(string userId, string title, string message, string link = null)
+        public async Task SendInAppNotificationAsync(string userId, string title, string message, string? link = null)
         {
             // TODO: Implement with SignalR
             _logger.LogInformation($"In-app notification to {userId}: {title} - {message}");

@@ -1,3 +1,4 @@
+//Services/IFacilityService.cs
 using geoback.Data;
 using geoback.DTOs;
 using geoback.Models;
@@ -56,36 +57,36 @@ namespace geoback.Services
         }
 
         private FacilityDto MapToDto(Facility facility)
+{
+    return new FacilityDto
+    {
+        Id = facility.Id,
+        IBPSNumber = facility.IBPSNumber,
+        CustomerName = facility.CustomerName,
+        TotalAmount = facility.TotalApprovedAmount,
+        ProjectDescription = facility.ProjectDescription,
+        SiteLatitude = facility.SiteLatitude,
+        SiteLongitude = facility.SiteLongitude,
+        AllowedGeoFenceRadius = facility.AllowedGeoFenceRadius ?? 100,
+        Milestones = facility.Milestones?.Select(m => new MilestoneDto
         {
-            return new FacilityDto
-            {
-                Id = facility.Id,
-                IBPSNumber = facility.IBPSNumber,
-                CustomerName = facility.CustomerName,
-                TotalApprovedAmount = facility.TotalApprovedAmount,
-                ProjectDescription = facility.ProjectDescription,
-                SiteLatitude = facility.SiteLatitude,
-                SiteLongitude = facility.SiteLongitude,
-                AllowedGeoFenceRadius = facility.AllowedGeoFenceRadius ?? 100,
-                Milestones = facility.Milestones?.Select(m => new MilestoneDto
-                {
-                    Id = m.Id,
-                    Description = m.Description,
-                    MilestoneOrder = m.MilestoneOrder,
-                    AllocatedAmount = m.AllocatedAmount,
-                    IsAchieved = m.IsAchieved,
-                    AchievedDate = m.AchievedDate
-                }).ToList() ?? new(),
-                Tranches = facility.Tranches?.Select(t => new DrawdownTrancheDto
-                {
-                    Id = t.Id,
-                    TrancheNumber = t.TrancheNumber,
-                    Amount = t.Amount,
-                    RequestDate = t.RequestDate,
-                    DisbursementDate = t.DisbursementDate,
-                    Status = t.Status
-                }).ToList() ?? new()
-            };
-        }
+            Id = m.Id,
+            Description = m.Description,
+            MilestoneOrder = m.MilestoneOrder,
+            AllocatedAmount = m.AllocatedAmount,
+            IsAchieved = m.IsAchieved,
+            AchievedDate = m.AchievedDate
+        }).OrderBy(m => m.MilestoneOrder).ToList() ?? new List<MilestoneDto>(),
+        Tranches = facility.Tranches?.Select(t => new DrawdownTrancheDto
+        {
+            Id = t.Id,
+            TrancheNumber = t.TrancheNumber,
+            Amount = t.Amount,
+            RequestDate = t.RequestDate,
+            DisbursementDate = t.DisbursementDate,
+            Status = t.Status
+        }).OrderBy(t => t.RequestDate).ToList() ?? new List<DrawdownTrancheDto>()
+    };
+}
     }
 }

@@ -1,5 +1,6 @@
 using geoback.Data;
 using geoback.Services;
+using geoback.Hubs;
 using Microsoft.EntityFrameworkCore;
 
 
@@ -9,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddScoped<IFacilityService, FacilityService>();
 
 // MySQL Database Context
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -40,6 +42,9 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Add SignalR for real-time notifications
+builder.Services.AddSignalR();
+
 // Add authentication if needed (commented out for now)
 // builder.Services.AddAuthentication();
 
@@ -57,6 +62,7 @@ app.UseCors("ReactApp");
 // app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<NotificationHub>("/hub/notificationHub");
 
 // Test database connection on startup
 using (var scope = app.Services.CreateScope())

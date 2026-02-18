@@ -1,3 +1,4 @@
+//DTOs/FacilityDto.cs
 namespace geoback.DTOs
 {
     public class FacilityDto
@@ -5,7 +6,7 @@ namespace geoback.DTOs
         public int Id { get; set; }
         public string IBPSNumber { get; set; } = string.Empty;
         public string CustomerName { get; set; } = string.Empty;
-        public decimal TotalApprovedAmount { get; set; }
+        public decimal TotalAmount { get; set; }
         public string? ProjectDescription { get; set; }
         public decimal? SiteLatitude { get; set; }
         public decimal? SiteLongitude { get; set; }

@@ -1,4 +1,4 @@
-//geo-back/Controllers/ClientsController.cs
+// Controllers/ClientsController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using geoback.Data;
